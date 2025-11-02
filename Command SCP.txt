@@ -1,0 +1,27 @@
+Creation d'une clef SSH
+> ssh-keygen
+Deposer une clef SSH sur UBUNTU
+> type $env:USERPROFILE\.ssh\id_rsa.pub | ssh frederic@192.168.0.22 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+
+
+Connaitre la version de ubuntu
+> cat /etc/lsb-release
+
+Lister le status du parefeu
+CF : https://guide.ubuntu-fr.org/16.04/desktop/net-firewall-on-off.html
+> sudo ufw status
+Ajouter une regle
+> sudo ufw allow 22 (pour SSH par defaut)
+
+Sur Windows : linux --> win : scp frederic@192.168.0.23:/home/frederic/Documents/Echolink-Custom/* .
+Sur Windows : win --> linux : scp * frederic@192.168.0.23:/home/frederic/Documents/Echolink-Custom/*
+
+Pour redémarrer le système Linux à partir d'une session de terminal
+sudo reboot
+
+Pour que le systeme redémarre sous GOLANG sans taper le mot de passe 
+> whoami
+> sudo visudo
+
+Installation de ffmpeg sous ubuntu
+> sudo apt install ffmpeg -y
