@@ -29,6 +29,9 @@ Installation de ffmpeg sous ubuntu
 Configuration
 > sudo nano /usr/local/etc/svxlink/svxlink.conf
 
-Lancer les services
+Lancer le service svxlogd
 > sudo systemctl start svxlogd.service # lancement de mon service custom des logs
+Lecture des logs
+> nano /var/log/svxlink/log_svxlink_2025-11-02.txt
+Lancer le service svxlink
 > sudo systemctl start svxlink.service # lancement de mon service ECHOLINK
