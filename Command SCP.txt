@@ -25,3 +25,10 @@ Pour que le systeme redémarre sous GOLANG sans taper le mot de passe
 
 Installation de ffmpeg sous ubuntu
 > sudo apt install ffmpeg -y
+
+Configuration
+> sudo nano /usr/local/etc/svxlink/svxlink.conf
+
+Lancer les services
+> sudo systemctl start svxlogd.service # lancement de mon service custom des logs
+> sudo systemctl start svxlink.service # lancement de mon service ECHOLINK

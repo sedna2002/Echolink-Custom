@@ -216,7 +216,7 @@ func cleanupOld(dir, prefix string, keep int) error {
  */
 func runJournalctl(unit string, stop <-chan struct{}) (io.ReadCloser, *exec.Cmd, error) {
 	// journalctl -u <unit> -f -o cat
-	cmd := exec.Command("journalctl", "-u", unit, "-f", "-o", "cat")
+	cmd := exec.Command("journalctl", "-u", unit, "-f", "-o", "short-iso")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, nil, err
