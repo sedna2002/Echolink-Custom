@@ -241,6 +241,10 @@ func main() {
 
 	fmt.Printf("Démarrage de 'svxlogd' version %s\n", version)
 	fmt.Printf("Logging svxlink unit '%s' vers le dossier '%s' avec le préfixe '%s'\n", *jctlUnit, *outDir, *prefix)
+	fmt.Printf("Flush periode en secondes            : %v\n", flushPeriod)
+	fmt.Printf("Compression des logs rotatifs        : %v\n", *compress)
+	fmt.Printf("Jours de logs compressés à conserver : %v\n", *keepDays)
+	fmt.Printf("RestartWait                          : %v\n", restartWait)
 
 	// ensure output directory
 	if err := os.MkdirAll(*outDir, 0755); err != nil {
