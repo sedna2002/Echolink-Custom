@@ -1,5 +1,5 @@
-11-11 17:44:19 Mode simulation journalctl (Windows détecté)
-2025-11-11 17:44:27 journalctl terminated, restarting...
-2025-11-11 17:44:27 Mode simulation journalctl (Windows détecté)
-2025-11-11 17:44:46 journalctl terminated, restarting...
-2025-11-11 17:44:46 Mode simulation journalctl (Windows détecté)
+ 23:33:48 Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: F4AMY: EchoLink QSO state changed to BYE_RECEIVED
+2025-11-11 23:33:48 Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: F4AMY: EchoLink QSO state changed to DISCONNECTED
+2025-11-11 23:33:48 Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: SimplexLogic: Deactivating module EchoLink...
+2025-11-11 23:33:48 Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: Tx1: Disconnected from remote transmitter at 192.168.0.26:5210: Connection timed out
+2025-11-11 23:33:48 Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: Tx1: Turning the transmitter OFF
