@@ -2,212 +2,95 @@
 package main
 
 import (
-	"bufio"
-	"compress/gzip"
-	"flag"
+	extension "ExtensionLinux"
+	logx "LogX"
+	"database/sql"
 	"fmt"
+	"strings"
+
+	"encoding/json"
+	"log"
+	"regexp"
+	"runtime"
+
+	_ "github.com/go-sql-driver/mysql"
+
+	"bufio"
+	"flag"
 	"io"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
-	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
 
-var (
-	outDir      = flag.String("dir", "/var/log/svxlink", "directory to write logs")
-	prefix      = flag.String("prefix", "log_svxlink_", "log filename prefix")
-	flushPeriod = flag.Int("flush", 10, "flush to disk every N seconds")
-	compress    = flag.Bool("compress", true, "compress rotated (old) logs")
-	keepDays    = flag.Int("keep", 14, "how many compressed backups to keep (older removed)")
-	jctlUnit    = flag.String("unit", "svxlink.service", "systemd unit name for journalctl -u <unit> -f")
-	restartWait = flag.Int("restart-wait", 3, "seconds to wait before restarting journalctl if it exits")
+const (
+	//scheme       = "http"
+	//pathServer   = "/Echolink"
+	//pathCommande = "/rest/commandes"
+	//host         = "localhost"
+	//dbPassword   = "root"
+	//dbUser       = "root"
+	//dbName       = "Echolink"
+
+	SIGINT_USER = syscall.Signal(0x10000)
+
+	Echolink           = "Echolink serveur"
+	version     string = "1.1.0"
+	description string = "Application pour : " + Echolink
+	//portServerREST        = 6504
+	//logFilePath string = "nohupX.out"
+
+	filenameLOG = "svxlink_%s.log"
+
+	dbMySql_Port     = 3306
+	dbMySql_Host     = "192.168.0.23" //"127.0.0.1"
+	dbMySql_User     = "root"
+	dbMySql_Password = "rootroot"
+	dbMySql_DataBase = "echolink"
 )
 
-const version = "1.0.0"
-
-type logger struct {
-	dir    string
-	prefix string
-
-	mu     sync.Mutex
-	f      *os.File
-	w      *bufio.Writer
-	curDay string // YYYY-MM-DD
+type Watchdog struct {
+	// actif
+	Actif bool `json:"actif"`
+	// Nombre maximum de tentatives vides avant de considérer la connexion comme perdue
+	MaxEmptyAttempts int `json:"maxEmptyAttempts"`
 }
 
-/**
- * getFilenameForDay returns the log filename for given day (YYYY-MM-DD)
- */
-func (l *logger) getFilenameForDay(day string) string {
-	return filepath.Join(l.dir, fmt.Sprintf("%s%s.txt", l.prefix, day))
+type Video struct {
+	Actif   bool   `json:"actif"`
+	Rtsp    string `json:"rtsp"`
+	Timeout int    `json:"timeout"`
+	Fps     int    `json:"fps"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
 }
 
-/**
- * openForDay opens (or reuses) the log file for given day (YYYY-MM-DD)
- */
-func (l *logger) openForDay(day string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+type Config struct {
+	PortServerREST int    `json:"portServerREST"`
+	Scheme         string `json:"scheme"`
+	PathServer     string `json:"pathServer"`
+	PathCommande   string `json:"pathCommande"`
+	Host           string `json:"host"`
+	DBUser         string `json:"dbUser"`
+	DBPassword     string `json:"dbPassword"`
+	DBName         string `json:"dbName"`
+	// Indicatif radioamateur.
+	Callsign string `json:"callsign"`
+	// Latitude et Longitude de la station météo
+	// Utilisé pour l'envoi des données vers APRS et Weather Underground
+	// Ces valeurs sont des chaînes de caractères pour éviter les problèmes de précision avec les nombres flottants
+	// Elles doivent être au format "latitude,longitude" (ex: "4885.66N,235.22E" pour Paris) centieme de degré
+	Latitude  string   `json:"latitude"`
+	Longitude string   `json:"longitude"`
+	Emails    []string `json:"emails"`
 
-	if l.curDay == day && l.f != nil {
-		return nil
-	}
+	// Watchdog
+	Watchdog Watchdog `json:"watchdog"`
 
-	// close old
-	if l.w != nil {
-		l.w.Flush()
-	}
-	if l.f != nil {
-		l.f.Sync()
-		l.f.Close()
-	}
-
-	fn := l.getFilenameForDay(day)
-	if err := os.MkdirAll(l.dir, 0755); err != nil {
-		return err
-	}
-
-	f, err := os.OpenFile(fn, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-
-	l.f = f
-	l.w = bufio.NewWriterSize(f, 64*1024)
-	l.curDay = day
-	return nil
-}
-
-/**
- * writeLine writes a line to the current log file
- */
-func (l *logger) writeLine(line string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.w == nil {
-		return fmt.Errorf("writer not opened")
-	}
-	_, err := l.w.WriteString(line + "\n")
-	return err
-}
-
-/**
- * flush flushes current log file to disk
- */
-func (l *logger) flush() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.w != nil {
-		if err := l.w.Flush(); err != nil {
-			return err
-		}
-	}
-	if l.f != nil {
-		return l.f.Sync()
-	}
-	return nil
-}
-
-/**
- * close closes the current log file
- */
-func (l *logger) close() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.w != nil {
-		_ = l.w.Flush()
-	}
-	if l.f != nil {
-		_ = l.f.Sync()
-		_ = l.f.Close()
-	}
-	l.w = nil
-	l.f = nil
-	l.curDay = ""
-}
-
-// compressFile gzips `path` and writes `path.gz`, then removes original.
-// Returns path of gz file or error.
-func compressFile(path string) (string, error) {
-	in, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer in.Close()
-
-	outPath := path + ".gz"
-	tmpPath := outPath + ".tmp"
-
-	out, err := os.Create(tmpPath)
-	if err != nil {
-		return "", err
-	}
-
-	gw := gzip.NewWriter(out)
-	gw.Name = filepath.Base(path)
-	gw.ModTime = time.Now()
-
-	_, err = io.Copy(gw, in)
-	_ = gw.Close()
-	_ = out.Close()
-	if err != nil {
-		_ = os.Remove(tmpPath)
-		return "", err
-	}
-
-	// move tmp to final
-	if err := os.Rename(tmpPath, outPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return "", err
-	}
-
-	// remove original
-	if err := os.Remove(path); err != nil {
-		// not fatal, but return error
-		return outPath, fmt.Errorf("compressed but failed removing original: %w", err)
-	}
-
-	return outPath, nil
-}
-
-// cleanupOld archives: keep only last keepDays of compressed logs matching prefix
-func cleanupOld(dir, prefix string, keep int) error {
-	if keep <= 0 {
-		return nil
-	}
-	dirEntries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	// find *.txt.gz matching prefix
-	var gzFiles []os.DirEntry
-	for _, e := range dirEntries {
-		if e.Type().IsRegular() && strings.HasPrefix(e.Name(), prefix) && strings.HasSuffix(e.Name(), ".txt.gz") {
-			gzFiles = append(gzFiles, e)
-		}
-	}
-	// sort by name (date in name => lexical sorts by date) newest last
-	// We want to remove oldest beyond keep
-	if len(gzFiles) <= keep {
-		return nil
-	}
-	// sort ascending
-	sortFn := func(i, j int) bool { return gzFiles[i].Name() < gzFiles[j].Name() }
-	// simple insertion sort (few files)
-	for i := 1; i < len(gzFiles); i++ {
-		for j := i; j > 0 && sortFn(j, j-1); j-- {
-			gzFiles[j], gzFiles[j-1] = gzFiles[j-1], gzFiles[j]
-		}
-	}
-	toRemove := gzFiles[:len(gzFiles)-keep]
-	for _, e := range toRemove {
-		_ = os.Remove(filepath.Join(dir, e.Name()))
-	}
-	return nil
+	// Serveur Video camera
+	Video Video `json:"video"`
 }
 
 /**
@@ -215,6 +98,16 @@ func cleanupOld(dir, prefix string, keep int) error {
  * and the command object. The caller is responsible for stopping the command.
  */
 func runJournalctl(unit string, stop <-chan struct{}) (io.ReadCloser, *exec.Cmd, error) {
+	if runtime.GOOS == "windows" {
+		// Simulation pour tests sous Windows
+		file_LOG.WriteStringSprintLn("Mode simulation journalctl (Windows détecté)")
+		f, err := os.Open("fake_journal.log")
+		if err != nil {
+			return nil, nil, err
+		}
+		return f, &exec.Cmd{}, nil
+	}
+
 	// journalctl -u <unit> -f -o cat
 	cmd := exec.Command("journalctl", "-u", unit, "-f", "-o", "short-iso")
 	stdout, err := cmd.StdoutPipe()
@@ -236,30 +129,54 @@ func runJournalctl(unit string, stop <-chan struct{}) (io.ReadCloser, *exec.Cmd,
 	return stdout, cmd, nil
 }
 
+var config *Config
+var file_LOG logx.File_LOG
+var err error = nil
+var pathServerALL string
+var _, exePathLocal string = extension.GetPathExecutable()
+var dbMySql *sql.DB
+
+var (
+	outDir      = flag.String("dir", exePathLocal+string(os.PathSeparator)+"Log" /*"/var/log/svxlink"*/, "directory to write logs")
+	prefix      = flag.String("prefix", filenameLOG, "log filename prefix")
+	compress    = flag.Bool("compress", true, "compression des fichiers ultérieurs à la date courante")
+	maxsize     = flag.Int("maxsize", 0, "taille maximale du fichier courant : 0 = pas de limite")
+	keepDays    = flag.Int("keep", 30, "how many compressed backups to keep (older removed)")
+	jctlUnit    = flag.String("unit", "svxlink.service", "systemd unit name for journalctl -u <unit> -f")
+	restartWait = flag.Int("restart-wait", 5, "seconds to wait before restarting journalctl if it exits")
+)
+
 func main() {
+
 	flag.Parse()
 
-	fmt.Printf("Démarrage de 'svxlogd' version %s\n", version)
-	fmt.Printf("Logging svxlink unit '%s' vers le dossier '%s' avec le préfixe '%s'\n", *jctlUnit, *outDir, *prefix)
-	fmt.Printf("Flush periode en secondes            : %v\n", flushPeriod)
-	fmt.Printf("Compression des logs rotatifs        : %v\n", *compress)
-	fmt.Printf("Jours de logs compressés à conserver : %v\n", *keepDays)
-	fmt.Printf("RestartWait                          : %v\n", restartWait)
+	config, err = LoadConfig("config.json")
+	if err != nil {
+		log.Fatalf("Erreur de lecture config.json: %v", err)
+	}
+	pathServerALL = config.PathServer + config.PathCommande
 
-	// ensure output directory
-	if err := os.MkdirAll(*outDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "cannot create outdir %s: %v\n", *outDir, err)
-		os.Exit(1)
+	file_LOG = logx.File_LOG{
+		Filename:                *prefix,
+		FilenamePath:            *outDir,
+		SizeMax:                 int64(*maxsize), // Pas de limite
+		RatioSuppressionPercent: 20,
+		Cmd:                     true,
+		RetentionJours:          *keepDays,
+		Utc:                     false,
+		Compress:                *compress,
 	}
 
-	logger := &logger{
-		dir:    *outDir,
-		prefix: *prefix,
-	}
+	file_LOG.WriteStringSprintLn("Démarrage de 'svxlogd' version %s", version)
+	file_LOG.WriteStringSprintLn("Logging svxlink unit '%s' vers le dossier '%s' avec le préfixe '%s'", *jctlUnit, strings.ReplaceAll(file_LOG.FilenamePath, "%", "%%"), file_LOG.Filename)
 
-	// start flush ticker
-	flushTicker := time.NewTicker(time.Duration(*flushPeriod) * time.Second)
-	defer flushTicker.Stop()
+	file_LOG.WriteStringSprintLn("Maximum size            : %v", 0)
+	file_LOG.WriteStringSprintLn("RatioSuppressionPercent : %v", 20)
+	file_LOG.WriteStringSprintLn("RetentionJours          : %v", file_LOG.RetentionJours)
+	file_LOG.WriteStringSprintLn("Compression             : %v", file_LOG.Compress)
+
+	file_LOG.WriteStringSprintLn("RestartWait             : %v", *restartWait)
+	file_LOG.WriteStringSprintLn("pathServerALL           : %v", pathServerALL)
 
 	// signal handling for graceful shutdown
 	sigc := make(chan os.Signal, 1)
@@ -267,14 +184,30 @@ func main() {
 
 	// stop channel to kill journalctl subprocess
 	jStop := make(chan struct{})
-	defer close(jStop)
+	//defer close(jStop)
 
+	dbMySql = openDB()
+	if dbMySql == nil {
+		file_LOG.Error().WriteStringSprintLn("Erreur lors de l'accés à MySQL")
+		return
+	}
+
+	var versionMySql string
+	err = dbMySql.QueryRow("SELECT VERSION()").Scan(&versionMySql)
+	if err != nil {
+		file_LOG.Error().WriteStringSprintLn("Erreur lors de la lecture de la version MySQL : %v", err)
+		return
+	}
+
+	file_LOG.WriteStringSprintLn("Version MySQL : %v", versionMySql)
+
+	re := regexp.MustCompile(`^([A-Z0-9]+)\s+is running\s+(.*?)\s+on a\s+(.*?),\s+with\s+(a-zA-Z0-9-)+\s+version\s+(\d+)`)
 	// loop that (re)starts journalctl and consumes lines
 	go func() {
 		for {
 			stdout, cmd, err := runJournalctl(*jctlUnit, jStop)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to start journalctl: %v (retry in %d sec)\n", err, *restartWait)
+				file_LOG.Error().WriteStringSprintLn("failed to start journalctl: %v (retry in %d sec)", err, *restartWait)
 				time.Sleep(time.Duration(*restartWait) * time.Second)
 				continue
 			}
@@ -288,16 +221,18 @@ func main() {
 			for scanner.Scan() {
 				line := scanner.Text()
 
-				// open log for current day
-				now := time.Now()
-				day := now.Format("2006-01-02")
-				if err := logger.openForDay(day); err != nil {
-					fmt.Fprintf(os.Stderr, "openForDay error: %v\n", err)
-					// continue nonetheless
-				}
+				cmd := file_LOG.Cmd
+				file_LOG.Cmd = false
+				file_LOG.WriteStringLn(line)
+				file_LOG.Cmd = cmd
 
-				if err := logger.writeLine(line); err != nil {
-					fmt.Fprintf(os.Stderr, "writeLine error: %v\n", err)
+				if re.MatchString(line) {
+					matches := re.FindStringSubmatch(line)
+					if len(matches) >= 6 {
+						insertConnexion(dbMySql, matches[1], matches[2], matches[3], matches[4], matches[5])
+					} else {
+						file_LOG.WriteStringSprintLn("Format non parsable : %s", line)
+					}
 				}
 
 				// If date changed (rare mid-line boundary), handle rotation/compression.
@@ -306,11 +241,13 @@ func main() {
 
 			// scanner ended (journalctl exited)
 			if err := scanner.Err(); err != nil {
-				fmt.Fprintf(os.Stderr, "journalctl scanner error: %v\n", err)
+				file_LOG.Error().WriteStringSprintLn("journalctl scanner error: %v", err)
 			}
 
 			// attempt to wait the command (gives it a chance to exit cleanly)
-			_ = cmd.Wait()
+			if cmd != nil {
+				_ = cmd.Wait()
+			}
 
 			// If stop requested by program shutdown, break loop.
 			select {
@@ -321,55 +258,85 @@ func main() {
 
 			// restart after short sleep
 			time.Sleep(time.Duration(*restartWait) * time.Second)
-			fmt.Fprintf(os.Stderr, "journalctl terminated, restarting...\n")
+			file_LOG.Error().WriteStringSprintLn("journalctl terminated, restarting...")
 		}
 	}()
 
 	// main control loop: flush and handle day changes, compression, cleanup
-	for {
-		select {
-		case <-flushTicker.C:
-			// flush current file
-			if err := logger.flush(); err != nil {
-				fmt.Fprintf(os.Stderr, "flush error: %v\n", err)
-			}
+	for s := range sigc {
+		file_LOG.Error().WriteStringSprintLn("signal %v received, shutting down...", s)
+		// stop journalctl subprocess by closing channel
+		close(jStop)
+		return
+	}
+}
 
-			// handle rotation by date (if date changed since open)
-			now := time.Now()
-			day := now.Format("2006-01-02")
-			logger.mu.Lock()
-			current := logger.curDay
-			logger.mu.Unlock()
-			if current != "" && current != day {
-				// close previous day and optionally compress it
-				prevFile := logger.getFilenameForDay(current)
+// LoadConfig charge la configuration à partir d'un fichier JSON.
+// Elle lit le fichier spécifié par le nom de fichier, décode le contenu JSON
+func LoadConfig(filename string) (*Config, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	var cfg Config
+	err = json.Unmarshal(data, &cfg)
+	return &cfg, err
+}
 
-				// close logger -> next open will create new file
-				logger.close()
+func openDB() *sql.DB {
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/", dbMySql_User, dbMySql_Password, dbMySql_Host, dbMySql_Port))
+	if err != nil || db == nil {
+		log.Fatal(err)
+	}
 
-				if *compress {
-					if _, err := os.Stat(prevFile); err == nil {
-						fmt.Fprintf(os.Stderr, "compressing %s\n", prevFile)
-						if _, err := compressFile(prevFile); err != nil {
-							fmt.Fprintf(os.Stderr, "compress error %v\n", err)
-						}
-					}
-				}
+	/*
+		   	CREATE TABLE connexions (
+		       id INT AUTO_INCREMENT PRIMARY KEY,
+		       indicatif VARCHAR(20),
+		       plateforme VARCHAR(100),
+		       appareil VARCHAR(100),
+			   os VARCHAR(100),
+		       version VARCHAR(20),
+		       date_connexion DATETIME DEFAULT CURRENT_TIMESTAMP
+		   );
+	*/
+	_, err = db.Exec(`CREATE DATABASE IF NOT EXISTS echolink;`)
+	if err != nil {
+		file_LOG.Fatalf("Erreur de creation de la table %v: %v", "connexions", err)
+		return nil
+	}
 
-				// cleanup old compressed files
-				if err := cleanupOld(*outDir, *prefix, *keepDays); err != nil {
-					fmt.Fprintf(os.Stderr, "cleanup error: %v\n", err)
-				}
-			}
+	db, err = sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", dbMySql_User, dbMySql_Password, dbMySql_Host, dbMySql_Port, dbMySql_DataBase))
+	if err != nil || db == nil {
+		file_LOG.Fatalf("%v", err)
+	}
 
-		case s := <-sigc:
-			fmt.Fprintf(os.Stderr, "signal %v received, shutting down...\n", s)
-			// stop journalctl subprocess by closing channel
-			close(jStop)
-			// final flush/close
-			_ = logger.flush()
-			logger.close()
-			return
-		}
+	_, err = db.Exec(`CREATE TABLE connexions (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		indicatif VARCHAR(20),
+		plateforme VARCHAR(100),
+		appareil VARCHAR(100),
+		os VARCHAR(100),
+		version VARCHAR(20),
+		date_connexion DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`)
+	if err != nil {
+		file_LOG.Fatalf("Erreur de creation de la table %v: %v", "connexions", err)
+		return nil
+	}
+
+	return db
+}
+
+/**
+ *
+ */
+func insertConnexion(db *sql.DB, indicatif, plateforme, appareil, os, version string) {
+	_, err := db.Exec(`
+        INSERT INTO connexions (indicatif, plateforme, appareil, os, version)
+        VALUES (?, ?, ?, ?, ?)`,
+		indicatif, plateforme, appareil, os, version)
+	if err != nil {
+		file_LOG.Error().WriteStringSprintLn("Erreur insertion: %v", err)
 	}
 }

@@ -1,0 +1,27 @@
+{
+  "portServerREST": 6504,
+  "scheme": "http",
+  "pathServer": "/WeatherStation",
+  "pathCommande": "/rest/commandes",
+  "host": "localhost",
+  "dbUser": "root",
+  "dbPassword": "root",
+  "dbName": "weatherstation",
+  "latitude": "4327.00N",
+  "longitude": "00528.00E",
+  "emails" : ["f.cravero@free.fr", "f.cravero46@gmail.com"],
+  "callsign": "F4AMY",
+  "watchdog":{
+    "actif": true,
+    "maxEmptyAttempts": 10
+  },
+  "video": {
+    "actif": true,
+    "rtsp": "",
+    "timeout": 20,
+    "fps": 10,
+    "width": 640,
+    "height": 480
+  },
+  "version": "0.2.0"
+}

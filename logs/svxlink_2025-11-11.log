@@ -1,0 +1,6 @@
+essionPercent : 20
+2025-11-11 15:53:19 RetentionJours          : 7
+2025-11-11 15:53:19 Compression             : true
+2025-11-11 15:53:19 RestartWait             : 5
+2025-11-11 15:53:19 pathServerALL           : /WeatherStation/rest/commandes
+2025-11-11 15:53:48 Erreur de creation de la table connexions: dial tcp 192.168.0.23:3306: connectex: Une tentative de connexion a échoué car le parti connecté n’a pas répondu convenablement au-delà d’une certaine durée ou une connexion établie a échoué car l’hôte de connexion n’a pas répondu.

@@ -1,0 +1,33 @@
+Nov 11 14:23:22 raspberry-desktop2 svxlink[2998]: SimplexLogic: Loading /usr/local/share/svxlink/modules.d/ModuleTclVoiceMail.tcl
+Nov 11 14:23:22 raspberry-desktop2 svxlink[2998]: SimplexLogic: Loading /usr/local/share/svxlink/events.d/TclModule.tcl
+Nov 11 14:23:22 raspberry-desktop2 svxlink[2998]: SimplexLogic: Event handler script successfully loaded.
+Nov 11 14:23:22 raspberry-desktop2 svxlink[2998]:         Module Tcl v1.0.1.99.1@25.05.1-59-gd5a4714e starting...
+Nov 11 14:23:22 raspberry-desktop2 svxlink[2998]: NOTICE: Initialization done. Starting main application.
+Nov 11 14:23:22 raspberry-desktop2 svxlink[2998]: Connected to APRS server 45.248.50.37:14580
+Nov 11 14:23:22 raspberry-desktop2 svxlink[2998]: EchoLink directory status changed to ON
+Nov 11 14:23:24 raspberry-desktop2 svxlink[2998]: --- EchoLink directory server message: ---
+Nov 11 14:23:24 raspberry-desktop2 svxlink[2998]: EchoLink Server v2.6.159
+Nov 11 14:23:24 raspberry-desktop2 svxlink[2998]: ECHO1: Sydney, AU
+Nov 11 14:25:29 raspberry-desktop2 svxlink[2998]: Spurious audio packet received from 44.31.195.218
+Nov 11 14:25:30 raspberry-desktop2 svxlink[2998]: Incoming EchoLink connection from F4AMY () at 44.31.195.218
+Nov 11 14:25:30 raspberry-desktop2 svxlink[2998]: Spurious audio packet received from 44.31.195.218
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: Incoming EchoLink connection from F4AMY () at 44.31.195.218
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: Spurious audio packet received from 44.31.195.218
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: SimplexLogic: Loading /usr/local/share/svxlink/events.d/globals.tcl
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: SimplexLogic: Loading /usr/local/share/svxlink/events.d/locale.tcl
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: SimplexLogic: Loading /usr/local/share/svxlink/sounds/fr_FR/events.d/locale.tcl
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: SimplexLogic: Loading /usr/local/share/svxlink/events.d/EchoLinkCommon.tcl
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: Incoming EchoLink connection from F4AMY () at 44.31.195.218
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: SimplexLogic: Activating module EchoLink...
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: F4AMY: Accepting connection. EchoLink ID is 228230...
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: F4AMY: EchoLink QSO state changed to CONNECTED
+Nov 11 14:25:32 raspberry-desktop2 svxlink[2998]: Tx1: Turning the transmitter ON
+Nov 11 14:25:33 raspberry-desktop2 svxlink[2998]: --- EchoLink info message received from F4AMY ---
+Nov 11 14:25:33 raspberry-desktop2 svxlink[2998]: Station F4AMY
+Nov 11 14:25:33 raspberry-desktop2 svxlink[2998]: France
+Nov 11 14:25:33 raspberry-desktop2 svxlink[2998]: F4AMY is running EchoLink for Android on a samsung SM-G988B, with Android version 13.
+Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: F4AMY: EchoLink QSO state changed to BYE_RECEIVED
+Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: F4AMY: EchoLink QSO state changed to DISCONNECTED
+Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: SimplexLogic: Deactivating module EchoLink...
+Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: Tx1: Disconnected from remote transmitter at 192.168.0.26:5210: Connection timed out
+Nov 11 14:25:47 raspberry-desktop2 svxlink[2998]: Tx1: Turning the transmitter OFF
