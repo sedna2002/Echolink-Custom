@@ -14,7 +14,7 @@ Ajouter une regle
 > sudo ufw allow 22 (pour SSH par defaut)
 
 Sur Windows : linux --> win : scp frederic@192.168.0.23:/home/frederic/Documents/Echolink-Custom/* .
-Sur Windows : win --> linux : scp * frederic@192.168.0.23:/home/frederic/Documents/Echolink-Custom/*
+Sur Windows : win --> linux : scp * frederic@192.168.0.23:/home/frederic/Documents/Echolink-Custom/
 
 Pour redémarrer le système Linux à partir d'une session de terminal
 sudo reboot

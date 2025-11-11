@@ -43,12 +43,6 @@ const (
 	//logFilePath string = "nohupX.out"
 
 	filenameLOG = "svxlink_%s.log"
-
-	dbMySql_Port     = 3306
-	dbMySql_Host     = "192.168.0.23" //"127.0.0.1"
-	dbMySql_User     = "root"
-	dbMySql_Password = "rootroot"
-	dbMySql_DataBase = "echolink"
 )
 
 type Watchdog struct {
@@ -76,6 +70,7 @@ type Config struct {
 	DBUser         string `json:"dbUser"`
 	DBPassword     string `json:"dbPassword"`
 	DBName         string `json:"dbName"`
+	DBPort         int    `json:"dbPort"`
 	// Indicatif radioamateur.
 	Callsign string `json:"callsign"`
 	// Latitude et Longitude de la station météo
@@ -150,7 +145,7 @@ func main() {
 
 	flag.Parse()
 
-	config, err = LoadConfig("config.json")
+	config, err = LoadConfig(exePathLocal + string(os.PathSeparator) + "config.json")
 	if err != nil {
 		log.Fatalf("Erreur de lecture config.json: %v", err)
 	}
@@ -168,14 +163,16 @@ func main() {
 	}
 
 	file_LOG.WriteStringSprintLn("Démarrage de 'svxlogd' version %s", version)
+	file_LOG.WriteStringSprintLn("OS                      : %s", runtime.GOOS)
+	file_LOG.WriteStringSprintLn("ARCH                    : %s", runtime.GOARCH)
 	file_LOG.WriteStringSprintLn("Logging svxlink unit '%s' vers le dossier '%s' avec le préfixe '%s'", *jctlUnit, strings.ReplaceAll(file_LOG.FilenamePath, "%", "%%"), file_LOG.Filename)
 
-	file_LOG.WriteStringSprintLn("Maximum size            : %v", 0)
-	file_LOG.WriteStringSprintLn("RatioSuppressionPercent : %v", 20)
-	file_LOG.WriteStringSprintLn("RetentionJours          : %v", file_LOG.RetentionJours)
+	file_LOG.WriteStringSprintLn("Maximum size            : %v o", 0)
+	file_LOG.WriteStringSprintLn("RatioSuppressionPercent : %v %%", 20)
+	file_LOG.WriteStringSprintLn("RetentionJours          : %v jour(s)", file_LOG.RetentionJours)
 	file_LOG.WriteStringSprintLn("Compression             : %v", file_LOG.Compress)
 
-	file_LOG.WriteStringSprintLn("RestartWait             : %v", *restartWait)
+	file_LOG.WriteStringSprintLn("RestartWait             : %v seconde(s)", *restartWait)
 	file_LOG.WriteStringSprintLn("pathServerALL           : %v", pathServerALL)
 
 	// signal handling for graceful shutdown
@@ -201,8 +198,40 @@ func main() {
 
 	file_LOG.WriteStringSprintLn("Version MySQL : %v", versionMySql)
 
-	re := regexp.MustCompile(`^([A-Z0-9]+)\s+is running\s+(.*?)\s+on a\s+(.*?),\s+with\s+(a-zA-Z0-9-)+\s+version\s+(\d+)`)
+	re := regexp.MustCompile(`:\s+(?P<indicatif>[a-zA-Z0-9-]+)\s+is running\s+(?P<application>.*?) for (?P<plateforme>.*?)\s+on a\s+(?P<appareil>.*?),\s+with\s+(?P<OS>.*?)\s+version\s+(?P<version>[a-zA-Z.0-9]+)`)
 	// loop that (re)starts journalctl and consumes lines
+	/*
+		Nov 11 20:56:08 raspberry-desktop2 svxlink[3180]: --- EchoLink info message received from F4AMY ---
+		Nov 11 20:56:08 raspberry-desktop2 svxlink[3180]: Station F4AMY
+		Nov 11 20:56:08 raspberry-desktop2 svxlink[3180]: France
+		Nov 11 20:56:08 raspberry-desktop2 svxlink[3180]: F4AMY is running EchoLink for Android on a samsung SM-G988B, with Android version 13.
+		Nov 11 20:56:15 raspberry-desktop2 svxlink[3180]: Tx1: Turning the transmitter OFF
+		Nov 11 20:56:24 raspberry-desktop2 svxlink[3180]: F4AMY: EchoLink QSO state changed to BYE_RECEIVED
+		Nov 11 20:56:24 raspberry-desktop2 svxlink[3180]: F4AMY: EchoLink QSO state changed to DISCONNECTED
+		Nov 11 20:56:24 raspberry-desktop2 svxlink[3180]: SimplexLogic: Deactivating module EchoLink...
+		Nov 11 20:56:24 raspberry-desktop2 svxlink[3180]: Tx1: Turning the transmitter ON
+		Nov 11 20:56:32 raspberry-desktop2 svxlink[3180]: Tx1: Turning the transmitter OFF
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: Tx1: Disconnected from remote transmitter at 192.168.0.26:5210: Connection timed out
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: Spurious audio packet received from 44.31.195.220
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: SimplexLogic: Loading /usr/local/share/svxlink/events.d/globals.tcl
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: SimplexLogic: Loading /usr/local/share/svxlink/events.d/locale.tcl
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: SimplexLogic: Loading /usr/local/share/svxlink/sounds/fr_FR/events.d/locale.tcl
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: SimplexLogic: Loading /usr/local/share/svxlink/events.d/EchoLinkCommon.tcl
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: Incoming EchoLink connection from F4AMY () at 44.31.195.220
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: SimplexLogic: Activating module EchoLink...
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: F4AMY: Accepting connection. EchoLink ID is 228230...
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: F4AMY: EchoLink QSO state changed to CONNECTED
+		Nov 11 20:58:26 raspberry-desktop2 svxlink[3180]: Tx1: Turning the transmitter ON
+		Nov 11 20:58:27 raspberry-desktop2 svxlink[3180]: --- EchoLink info message received from F4AMY ---
+		Nov 11 20:58:27 raspberry-desktop2 svxlink[3180]: Station F4AMY
+		Nov 11 20:58:27 raspberry-desktop2 svxlink[3180]: France
+		Nov 11 20:58:27 raspberry-desktop2 svxlink[3180]: F4AMY is running EchoLink for Android on a samsung SM-G988B, with Android version 13.
+		Nov 11 20:58:41 raspberry-desktop2 svxlink[3180]: F4AMY: EchoLink QSO state changed to BYE_RECEIVED
+		Nov 11 20:58:41 raspberry-desktop2 svxlink[3180]: F4AMY: EchoLink QSO state changed to DISCONNECTED
+		Nov 11 20:58:41 raspberry-desktop2 svxlink[3180]: SimplexLogic: Deactivating module EchoLink...
+		Nov 11 20:58:41 raspberry-desktop2 svxlink[3180]: Tx1: Turning the transmitter OFF
+
+	*/
 	go func() {
 		for {
 			stdout, cmd, err := runJournalctl(*jctlUnit, jStop)
@@ -221,15 +250,19 @@ func main() {
 			for scanner.Scan() {
 				line := scanner.Text()
 
-				cmd := file_LOG.Cmd
-				file_LOG.Cmd = false
 				file_LOG.WriteStringLn(line)
-				file_LOG.Cmd = cmd
 
 				if re.MatchString(line) {
 					matches := re.FindStringSubmatch(line)
 					if len(matches) >= 6 {
-						insertConnexion(dbMySql, matches[1], matches[2], matches[3], matches[4], matches[5])
+						// Crée un map du nom de groupe vers sa valeur
+						result := make(map[string]string)
+						for i, name := range re.SubexpNames() {
+							if i != 0 && name != "" { // 0 = la ligne complète
+								result[name] = matches[i]
+							}
+						}
+						insertConnexion(dbMySql, result["indicatif"], result["application"], result["plateforme"], result["appareil"], result["os"], result["version"])
 					} else {
 						file_LOG.WriteStringSprintLn("Format non parsable : %s", line)
 					}
@@ -267,7 +300,9 @@ func main() {
 		file_LOG.Error().WriteStringSprintLn("signal %v received, shutting down...", s)
 		// stop journalctl subprocess by closing channel
 		close(jStop)
-		return
+		file_LOG.Error().WriteStringSprintLn("")
+		os.Exit(0)
+		//return
 	}
 }
 
@@ -284,7 +319,7 @@ func LoadConfig(filename string) (*Config, error) {
 }
 
 func openDB() *sql.DB {
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/", dbMySql_User, dbMySql_Password, dbMySql_Host, dbMySql_Port))
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/", config.DBUser, config.DBPassword, config.Host, config.DBPort))
 	if err != nil || db == nil {
 		log.Fatal(err)
 	}
@@ -306,16 +341,17 @@ func openDB() *sql.DB {
 		return nil
 	}
 
-	db, err = sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", dbMySql_User, dbMySql_Password, dbMySql_Host, dbMySql_Port, dbMySql_DataBase))
+	db, err = sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", config.DBUser, config.DBPassword, config.Host, config.DBPort, config.DBName))
 	if err != nil || db == nil {
 		file_LOG.Fatalf("%v", err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE connexions (
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS connexions (
 		id INT AUTO_INCREMENT PRIMARY KEY,
 		indicatif VARCHAR(20),
 		plateforme VARCHAR(100),
 		appareil VARCHAR(100),
+		application VARCHAR(100),
 		os VARCHAR(100),
 		version VARCHAR(20),
 		date_connexion DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -331,11 +367,11 @@ func openDB() *sql.DB {
 /**
  *
  */
-func insertConnexion(db *sql.DB, indicatif, plateforme, appareil, os, version string) {
+func insertConnexion(db *sql.DB, indicatif, application, plateforme, appareil, os, version string) {
 	_, err := db.Exec(`
-        INSERT INTO connexions (indicatif, plateforme, appareil, os, version)
-        VALUES (?, ?, ?, ?, ?)`,
-		indicatif, plateforme, appareil, os, version)
+        INSERT INTO connexions (indicatif, application, plateforme, appareil, os, version)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+		indicatif, application, plateforme, appareil, os, version)
 	if err != nil {
 		file_LOG.Error().WriteStringSprintLn("Erreur insertion: %v", err)
 	}
