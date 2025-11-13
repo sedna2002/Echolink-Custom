@@ -198,7 +198,7 @@ func main() {
 
 	file_LOG.WriteStringSprintLn("Version MySQL : %v", versionMySql)
 
-	reID := regexp.MustCompile(`:\s+(?P<indicatif>[a-zA-Z0-9-]+): Accepting connection\. EchoLink ID is (?P<id>[0-9a-zA-Z-]+)`)
+	reID := regexp.MustCompile(`:\s+(?P<indicatif>[a-zA-Z0-9-]+): Accepting connection\. EchoLink ID is (?P<idEcholink>[0-9a-zA-Z-]+)`)
 	re := regexp.MustCompile(`:\s+(?P<indicatif>[a-zA-Z0-9-]+)\s+is running\s+(?P<application>.*?) for (?P<plateforme>.*?)\s+on a\s+(?P<appareil>.*?),\s+with\s+(?P<OS>.*?)\s+version\s+(?P<version>[a-zA-Z.0-9]+)`)
 	// loop that (re)starts journalctl and consumes lines
 	/*
@@ -231,6 +231,24 @@ func main() {
 		Nov 11 20:58:41 raspberry-desktop2 svxlink[3180]: F4AMY: EchoLink QSO state changed to DISCONNECTED
 		Nov 11 20:58:41 raspberry-desktop2 svxlink[3180]: SimplexLogic: Deactivating module EchoLink...
 		Nov 11 20:58:41 raspberry-desktop2 svxlink[3180]: Tx1: Turning the transmitter OFF
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: Incoming EchoLink connection from F4AMY (frederic) at 137.226.114.137
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: SimplexLogic: Activating module EchoLink...
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: F4AMY: Accepting connection. EchoLink ID is 228230...
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: F4AMY: EchoLink QSO state changed to CONNECTED
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: Tx1: Turning the transmitter ON
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: --- EchoLink info message received from F4AMY ---
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: Station F4AMY
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: EchoLink ver 2.4.142
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: frederic
+		2025-11-13 21:30:34 2025-11-13T21:30:34+01:00 raspberry-desktop2 svxlink[1392]: Biver
+		2025-11-13 21:30:42 2025-11-13T21:30:41+01:00 raspberry-desktop2 svxlink[1392]: Tx1: Turning the transmitter OFF
+		2025-11-13 21:33:48 2025-11-13T21:33:48+01:00 raspberry-desktop2 svxlink[1392]: Tx1: Disconnected from remote transmitter at 192.168.0.26:5210: Connection timed out
+		2025-11-13 21:33:48 2025-11-13T21:33:48+01:00 raspberry-desktop2 svxlink[1392]: F4AMY: EchoLink QSO state changed to BYE_RECEIVED
+		2025-11-13 21:33:48 2025-11-13T21:33:48+01:00 raspberry-desktop2 svxlink[1392]: F4AMY: EchoLink QSO state changed to DISCONNECTED
+		2025-11-13 21:33:48 2025-11-13T21:33:48+01:00 raspberry-desktop2 svxlink[1392]: SimplexLogic: Deactivating module EchoLink...
+		2025-11-13 21:33:48 2025-11-13T21:33:48+01:00 raspberry-desktop2 svxlink[1392]: Tx1: Turning the transmitter ON
+		2025-11-13 21:33:56 2025-11-13T21:33:55+01:00 raspberry-desktop2 svxlink[1392]: Tx1: Turning the transmitter OFF
+
 	*/
 	go func() {
 		for {
@@ -247,10 +265,28 @@ func main() {
 			buf := make([]byte, 0, 64*1024)
 			scanner.Buffer(buf, maxBuf)
 
+			var idID int64 = -1
+			var idConnexions int64 = -1
 			for scanner.Scan() {
 				line := scanner.Text()
 
 				file_LOG.WriteStringLn(line)
+
+				if reID.MatchString(line) {
+					matches := reID.FindStringSubmatch(line)
+					if len(matches) >= 3 {
+						// Crée un map du nom de groupe vers sa valeur
+						result := make(map[string]string)
+						for i, name := range reID.SubexpNames() {
+							if i != 0 && name != "" { // 0 = la ligne complète
+								result[name] = matches[i]
+							}
+						}
+						idID = insertId(dbMySql, result["indicatif"], result["idEcholink"], -1)
+					} else {
+						file_LOG.WriteStringSprintLn("Format non parsable : %s", line)
+					}
+				}
 
 				if re.MatchString(line) {
 					matches := re.FindStringSubmatch(line)
@@ -262,21 +298,8 @@ func main() {
 								result[name] = matches[i]
 							}
 						}
-						insertConnexion(dbMySql, result["indicatif"], result["application"], result["plateforme"], result["appareil"], result["os"], result["version"])
-					} else {
-						file_LOG.WriteStringSprintLn("Format non parsable : %s", line)
-					}
-				} else if reID.MatchString(line) {
-					matches := reID.FindStringSubmatch(line)
-					if len(matches) >= 3 {
-						// Crée un map du nom de groupe vers sa valeur
-						result := make(map[string]string)
-						for i, name := range reID.SubexpNames() {
-							if i != 0 && name != "" { // 0 = la ligne complète
-								result[name] = matches[i]
-							}
-						}
-						insertId(dbMySql, result["indicatif"], result["id"])
+						idConnexions = insertConnexion(dbMySql, result["indicatif"], result["application"], result["plateforme"], result["appareil"], result["OS"], result["version"], idID)
+						idConnexions = idConnexions
 					} else {
 						file_LOG.WriteStringSprintLn("Format non parsable : %s", line)
 					}
@@ -362,6 +385,7 @@ func openDB() *sql.DB {
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS connexions (
 		id INT AUTO_INCREMENT PRIMARY KEY,
+		fk_idID int,
 		indicatif VARCHAR(20),
 		plateforme VARCHAR(100),
 		appareil VARCHAR(100),
@@ -377,6 +401,7 @@ func openDB() *sql.DB {
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS id (
 		id INT AUTO_INCREMENT PRIMARY KEY,
+		fk_idConnexions int,
 		indicatif VARCHAR(20),
 		idEcholink VARCHAR(20),
 		n int NOT NULL,
@@ -393,46 +418,82 @@ func openDB() *sql.DB {
 /**
  *
  */
-func insertConnexion(db *sql.DB, indicatif, application, plateforme, appareil, os, version string) {
-	_, err := db.Exec(`
-        INSERT INTO connexions (indicatif, application, plateforme, appareil, os, version)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-		indicatif, application, plateforme, appareil, os, version)
+func insertConnexion(db *sql.DB, indicatif, application, plateforme, appareil, os, version string, fk_idID int64) int64 {
+	res, err := db.Exec(`
+        INSERT INTO connexions (indicatif, application, plateforme, appareil, os, version, fk_idID)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		indicatif, application, plateforme, appareil, os, version, fk_idID)
 	if err != nil {
 		file_LOG.Error().WriteStringSprintLn("Erreur insertion: %v", err)
 	}
+
+	// Récupérer l'ID auto-incrémenté
+	insertedID, err := res.LastInsertId()
+	if err != nil {
+		file_LOG.Error().WriteStringSprintLn("Erreur récupération ID: %v", err)
+		return -1
+	}
+
+	return insertedID
 }
 
-func insertId(db *sql.DB, indicatif, id string) {
+func insertId(db *sql.DB, indicatif, idEcholink string, idConnexions int64) int64 {
 	var count int
 
 	// Vérifie si la combinaison existe déjà
-	err := db.QueryRow(`SELECT COUNT(*) FROM id WHERE indicatif = ? AND idEcholink = ?`, indicatif, id).Scan(&count)
+	err := db.QueryRow(`SELECT COUNT(*) FROM id WHERE indicatif = ? AND idEcholink = ?`, indicatif, idEcholink).Scan(&count)
 	if err != nil {
 		file_LOG.Error().WriteStringSprintLn("Erreur SELECT: %v", err)
-		return
+		return -1
 	}
 
 	if count == 0 {
 		// N'existe pas : on insère (initialise n à 1)
-		_, err = db.Exec(`INSERT INTO id (indicatif, idEcholink, n) VALUES (?, ?, ?)`, indicatif, id, 1)
+		res, err := db.Exec(`INSERT INTO id (indicatif, idEcholink, n, fk_idConnexions) VALUES (?, ?, ?, ?)`, indicatif, idEcholink, 1, idConnexions)
 		if err != nil {
 			file_LOG.Error().WriteStringSprintLn("Erreur insertion: %v", err)
+			return -1
 		}
+
+		// Récupérer l'ID auto-incrémenté
+		insertedID, err := res.LastInsertId()
+		if err != nil {
+			file_LOG.Error().WriteStringSprintLn("Erreur récupération ID: %v", err)
+			return -1
+		}
+
+		return insertedID
 	} else {
 		var n int
 		// Récupère la valeur actuelle de n
-		err = db.QueryRow(`SELECT n FROM id WHERE indicatif = ? AND idEcholink = ?`, indicatif, id).Scan(&n)
+		err = db.QueryRow(`SELECT n FROM id WHERE indicatif = ? AND idEcholink = ?`, indicatif, idEcholink).Scan(&n)
 		if err != nil {
 			file_LOG.Error().WriteStringSprintLn("Erreur SELECT n: %v", err)
-			return
+			return -1
 		}
 
 		n++
 		// Met à jour la colonne n
-		_, err = db.Exec(`UPDATE id SET n = ? WHERE indicatif = ? AND idEcholink = ?`, n, indicatif, id)
+		/*
+			_, err = db.Exec(`UPDATE id SET n = ? WHERE indicatif = ? AND idEcholink = ?`, n, indicatif, id)
+			if err != nil {
+				file_LOG.Error().WriteStringSprintLn("Erreur update n: %v", err)
+			}
+		*/
+
+		res, err := db.Exec(`INSERT INTO id (indicatif, idEcholink, n, fk_idConnexions) VALUES (?, ?, ?, ?)`, indicatif, idEcholink, n, idConnexions)
 		if err != nil {
-			file_LOG.Error().WriteStringSprintLn("Erreur update n: %v", err)
+			file_LOG.Error().WriteStringSprintLn("Erreur insertion: %v", err)
+			return -1
 		}
+
+		// Récupérer l'ID auto-incrémenté
+		insertedID, err := res.LastInsertId()
+		if err != nil {
+			file_LOG.Error().WriteStringSprintLn("Erreur récupération ID: %v", err)
+			return -1
+		}
+
+		return insertedID
 	}
 }
